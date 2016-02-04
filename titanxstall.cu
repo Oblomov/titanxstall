@@ -167,6 +167,18 @@ void sig_handler(int signum)
 	exit(1);
 }
 
+void check(const char *file, unsigned long line, const char *func)
+{
+	stringstream errmsg;
+	cudaError_t err = cudaGetLastError();
+	if (cudaSuccess != err) {
+		errmsg << file << ":" << line << " in " << func
+			<< ": runtime API error " << err << " (" << cudaGetErrorString(err) << ")";
+		throw runtime_error(errmsg.str());
+	}
+}
+#define CHECK(func) check(__FILE__, __LINE__, func)
+
 
 int main(int argc, char *argv[])
 {
@@ -214,32 +226,14 @@ int main(int argc, char *argv[])
 	const int numBlocks = (numParticles + blockSize - 1)/blockSize;
 
 	initParticles<<<numBlocks, blockSize>>>(info, hash, partidx, numParticles);
-
-	cudaError_t err = cudaGetLastError();
-	if (cudaSuccess != err) {
-		scratch << __FILE__ << ":" << __LINE__ << ": in initParticles"
-			<< ": runtime API error " << err << " (" << cudaGetErrorString(err) << ")";
-		throw runtime_error(scratch.str());
-	}
+	CHECK("initParticles");
 
 	while (true) {
 		reHashParticles<<<numBlocks, blockSize>>>(info, hash, partidx, numParticles);
-
-		err = cudaGetLastError();
-		if (cudaSuccess != err) {
-			scratch << __FILE__ << ":" << __LINE__ << ": in reHashParticles"
-				<< ": runtime API error " << err << " (" << cudaGetErrorString(err) << ")";
-			throw runtime_error(scratch.str());
-		}
+		CHECK("reHashParticles");
 
 		sort(info, hash, partidx, numParticles);
-
-		err = cudaGetLastError();
-		if (cudaSuccess != err) {
-			scratch << __FILE__ << ":" << __LINE__ << ": in sort"
-				<< ": runtime API error " << err << " (" << cudaGetErrorString(err) << ")";
-			throw runtime_error(scratch.str());
-		}
+		CHECK("sort");
 
 		++counter;
 
