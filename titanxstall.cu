@@ -199,17 +199,21 @@ void report(stringstream &scratch, bool on_console, bool keep)
 
 void cleanup(void)
 {
+	clog << "Closing info stream ..." << endl;
 	if (infostream) {
 		fclose(infostream);
 		shm_unlink(info_name.c_str());
 		infostream = NULL;
 	}
 	if (cacher) {
+		clog << "Clearing allocator cache ..." << endl;
 		cudaDeviceSynchronize();
 		delete cacher;
 		cacher = NULL;
 	}
+	clog << "Resetting device ..." << endl;
 	cudaDeviceReset();
+	clog << "... done." << endl;
 }
 
 void sig_handler(int signum)
