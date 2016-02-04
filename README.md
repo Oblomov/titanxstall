@@ -11,20 +11,22 @@ structure of the test.
 
 Build with `make`, run with `make test`. Only tested on Linux.
 
-You can customize build options by adding a `Makefile.local` file. This can be
-used e.g. to override the compute capability for which the program gets build
-(e.g. set `CUFLAGS=-arch=sm_20` to build for a Fermi card).
+You can customize build options by adding a `Makefile.local` file. This
+can be used e.g. to override the compute capability for which the
+program gets build (e.g. set `CUFLAGS=-arch=sm_20` to build for a Fermi
+card).
 
-If you want to run the program on a different device than the default and/or
-with a different number of elements than the default (5Mi), launch it manually.
-For example, to run on the 4th device with 10Mi elements, use:
+If you want to run the program on a different device than the default
+and/or with a different number of elements than the default (5Mi),
+launch it manually. For example, to run on the 4th device with 10Mi
+elements, use:
 
    ./titanxstall --device 3 --elements $((10*1024*1024))
 
 (for example).
 
-The `--cache-alloc` option can be passed to `titanxstall` to use a custom
-caching allocator in thrust in place of the default policy.
+The `--cache-alloc` option can be passed to `titanxstall` to use a
+custom caching allocator in thrust in place of the default policy.
 
 # Results
 
