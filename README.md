@@ -23,6 +23,9 @@ For example, to run on the 4th device with 10Mi elements, use:
 
 (for example).
 
+The `--cached-alloc` option can be passed to `titanxstall` to use a custom
+caching allocator in thrust in place of the default policy.
+
 # Results
 
 The program runs forever, or until it crashes or the GPU stalls.

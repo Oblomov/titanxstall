@@ -283,6 +283,12 @@ int main(int argc, char *argv[])
 	if (custom_alloc) {
 		cacher = new cached_allocator;
 		sort_func = &caching_sort;
+
+		scratch << "Caching allocator enabled";
+		timestamp(scratch.str());
+		cout << scratch.str() << endl;
+		scratch.str("");
+
 	}
 	unsigned long counter = 0;
 
@@ -309,7 +315,7 @@ int main(int argc, char *argv[])
 
 		++counter;
 
-		scratch << "iteration " << counter;
+		scratch << "Iteration " << counter;
 
 		timestamp(scratch.str());
 		scratch.str("");
