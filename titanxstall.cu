@@ -1,3 +1,6 @@
+/// Copyright (C) 2016 Giuseppe Bilotta <giuseppe.bilotta@gmail.com>
+/// License: GPLv3
+
 #include <sstream>
 #include <stdexcept>
 

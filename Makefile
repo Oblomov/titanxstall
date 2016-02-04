@@ -1,3 +1,5 @@
+### Public domain
+
 #override settings in Makefile.local
 sinclude Makefile.local
 
