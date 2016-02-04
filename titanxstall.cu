@@ -152,18 +152,19 @@ void timestamp(string msg)
 		init_pos = ftell(infostream);
 }
 
-void unlink_stream(void)
+void cleanup(void)
 {
 	if (infostream) {
 		fclose(infostream);
 		shm_unlink(info_name.c_str());
 		infostream = NULL;
 	}
+	cudaDeviceReset();
 }
 
 void sig_handler(int signum)
 {
-	unlink_stream();
+	cleanup();
 	exit(1);
 }
 
@@ -207,10 +208,38 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		throw runtime_error("can't register info stream cleanup function");
 
-	timestamp("initializing");
-	cout << "Initializing PID " << getpid() << " ..." << endl;
-
 	uint numParticles = 5*1024*1024;
+	uint device = 0;
+
+	const char * const * arg = argv + 1;
+	while (argc > 1) {
+		if (!strcmp(*arg, "--device")) {
+			if (argc < 2)
+				throw invalid_argument("please specify a device");
+			--argc;
+			++arg;
+			device = atoi(*arg);
+		} else if (!strcmp(*arg, "--elements")) {
+			if (argc < 2)
+				throw invalid_argument("please specify a device");
+			--argc;
+			++arg;
+			numParticles = atoi(*arg);
+		}
+		--argc;
+		++arg;
+
+	}
+
+	cudaSetDevice(device);
+	CHECK("set device");
+
+	scratch << "Initializing PID " << getpid() << " device " << device << " particles " << numParticles << " ...";
+
+	timestamp(scratch.str());
+	cout << scratch.str() << endl;
+	scratch.str("");
+
 
 	unsigned long counter = 0;
 
