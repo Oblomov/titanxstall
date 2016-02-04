@@ -1,28 +1,10 @@
 /// Copyright (C) 2016 Giuseppe Bilotta <giuseppe.bilotta@gmail.com>
 /// License: GPLv3
 
-#include <sstream>
-#include <stdexcept>
-
-#include <unistd.h>
-#include <signal.h>
-#include <sys/mman.h>
-#include <fcntl.h>
-#include <ctime>
-
-#include <cuda_runtime.h>
-
 #include <thrust/sort.h>
 #include <thrust/device_vector.h>
 #include <thrust/tuple.h>
 #include <thrust/iterator/zip_iterator.h>
-#include <thrust/system/cuda/execution_policy.h>
-
-// declare here for use by cached_alloc.h, should be refactored
-void check(const char *file, unsigned long line, const char *func);
-#define CHECK(func) check(__FILE__, __LINE__, func)
-
-#include "cached_alloc.h"
 
 #define restrict __restrict__
 
@@ -74,26 +56,6 @@ struct ptype_hash_compare :
 	}
 };
 
-static cached_allocator *cacher;
-
-typedef void (*sort_func_ptr)(key_iterator const&, key_iterator const&, thrust_uint_ptr const&);
-
-void default_sort(key_iterator const& key_start, key_iterator const& key_end, thrust_uint_ptr const& val_start)
-{
-	ptype_hash_compare comp;
-
-	thrust::sort_by_key(key_start, key_end, val_start, comp);
-}
-
-void caching_sort(key_iterator const& key_start, key_iterator const& key_end, thrust_uint_ptr const& val_start)
-{
-	ptype_hash_compare comp;
-
-	thrust::sort_by_key(thrust::cuda::par(*cacher), key_start, key_end, val_start, comp);
-}
-
-static sort_func_ptr sort_func = &default_sort;
-
 
 void
 sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles)
@@ -110,7 +72,7 @@ sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles)
 			particleHash + numParticles,
 			particleInfo + numParticles));
 
-	sort_func(key_start, key_end, particleIndex);
+        thrust::sort_by_key(key_start, key_end, particleIndex, ptype_hash_compare());
 }
 
 __global__ void
@@ -157,177 +119,31 @@ reHashParticles(
 	hashArray[idx] = pid/17 + (oldHash % (pid & 17));
 }
 
-using namespace std;
-
-static string info_name;
-static FILE *infostream;
-
-void timestamp(string const& msg, bool keep=false)
+int main()
 {
-	static long int init_pos = 0;
-
-	char timestamp[36] = {0};
-	time_t t;
-	struct tm *tmp;
-	size_t wrt = 0;
-	t = time(NULL);
-	tmp = localtime(&t);
-	if (tmp) {
-		wrt = strftime(timestamp, 36, "[%Y-%m-%dT%H:%M:%S] ", tmp);
-	}
-	if (!wrt) {
-		snprintf(timestamp, 36, "[unknown]");
-	}
-	fprintf(infostream, "%s: %s\n", timestamp, msg.c_str());
-	fflush(infostream);
-	if (!keep && init_pos)
-		fseek(infostream, init_pos, SEEK_SET);
-	else
-		init_pos = ftell(infostream);
-}
-
-// output the content of the scratch stringstream to the infostream, time-stamped,
-// and optionally to the console too
-// clear the scratch stringstream afterwards
-void report(stringstream &scratch, bool on_console, bool keep)
-{
-	timestamp(scratch.str(), keep);
-	if (on_console)
-		cout << scratch.str() << endl;
-	scratch.str("");
-}
-
-void cleanup(void)
-{
-	clog << "Closing info stream ..." << endl;
-	if (infostream) {
-		fclose(infostream);
-		shm_unlink(info_name.c_str());
-		infostream = NULL;
-	}
-	if (cacher) {
-		clog << "Clearing allocator cache ..." << endl;
-		cudaDeviceSynchronize();
-		delete cacher;
-		cacher = NULL;
-	}
-	clog << "Resetting device ..." << endl;
-	cudaDeviceReset();
-	clog << "... done." << endl;
-}
-
-void sig_handler(int signum)
-{
-	cleanup();
-	exit(1);
-}
-
-void check(const char *file, unsigned long line, const char *func)
-{
-	stringstream errmsg;
-	cudaError_t err = cudaDeviceSynchronize();
-	if (cudaSuccess != err) {
-		errmsg << file << ":" << line << " in " << func
-			<< ": runtime API error " << err << " (" << cudaGetErrorString(err) << ")";
-		throw runtime_error(errmsg.str());
-	}
-}
-
-
-int main(int argc, char *argv[])
-{
-	stringstream scratch;
-
-	scratch << "/titanxstall-" << getpid();
-
-	info_name = scratch.str();
-	scratch.str("");
-
-	int ret = shm_open(info_name.c_str(), O_RDWR | O_CREAT, S_IRWXU);
-	if (ret < 0)
-		throw runtime_error("can't open info stream");
-
-	infostream = fdopen(ret, "w");
-	if (!infostream)
-		throw runtime_error("can't fdopen info stream");
-
-
-	// catch SIGINT
-	struct sigaction int_action;
-	memset(&int_action, 0, sizeof(int_action));
-	int_action.sa_handler = sig_handler;
-	ret = sigaction(SIGINT, &int_action, NULL);
-
-	if (ret < 0)
-		throw runtime_error("can't register info stream cleanup function");
-
-	uint numParticles = 5*1024*1024;
-	uint device = 0;
-	bool custom_alloc = false;
-
-	const char * const * arg = argv + 1;
-	while (argc > 1) {
-		if (!strcmp(*arg, "--device")) {
-			if (argc < 2)
-				throw invalid_argument("please specify a device");
-			--argc;
-			++arg;
-			device = atoi(*arg);
-		} else if (!strcmp(*arg, "--elements")) {
-			if (argc < 2)
-				throw invalid_argument("please specify a device");
-			--argc;
-			++arg;
-			numParticles = atoi(*arg);
-		} else if (!strcmp(*arg, "--cache-alloc")) {
-			custom_alloc = true;
-		}
-		--argc;
-		++arg;
-
-	}
-
-	cudaSetDevice(device);
-	CHECK("set device");
-
-	scratch << "Initializing PID " << getpid() << " device " << device << " particles " << numParticles << " ...";
-	report(scratch, true, true);
-
-	if (custom_alloc) {
-		cacher = new cached_allocator;
-		sort_func = &caching_sort;
-
-		scratch << "Caching allocator enabled";
-		report(scratch, true, true);
-	}
-	unsigned long counter = 0;
-
-	particleinfo *info = NULL;
-	hashKey *hash = NULL;
-	uint *partidx = NULL;
-
-	cudaMalloc(&info, numParticles*sizeof(*info));
-	cudaMalloc(&hash, numParticles*sizeof(*hash));
-	cudaMalloc(&partidx, numParticles*sizeof(*partidx));
-
-	const int blockSize = 1024;
-	const int numBlocks = (numParticles + blockSize - 1)/blockSize;
-
-	initParticles<<<numBlocks, blockSize>>>(info, hash, partidx, numParticles);
-	CHECK("initParticles");
-
-	while (true) {
-		reHashParticles<<<numBlocks, blockSize>>>(info, hash, partidx, numParticles);
-		CHECK("reHashParticles");
-
-		sort(info, hash, partidx, numParticles);
-		CHECK("sort");
-
-		++counter;
-
-		scratch << "Iteration " << counter;
-
-		report(scratch, counter % 1000 == 0, false);
-	}
+  uint numParticles = 5*1024*1024;
+  unsigned long counter = 0;
+  
+  particleinfo *info = NULL;
+  hashKey *hash = NULL;
+  uint *partidx = NULL;
+  
+  cudaMalloc(&info, numParticles*sizeof(*info));
+  cudaMalloc(&hash, numParticles*sizeof(*hash));
+  cudaMalloc(&partidx, numParticles*sizeof(*partidx));
+  
+  const int blockSize = 1024;
+  const int numBlocks = (numParticles + blockSize - 1)/blockSize;
+  
+  while(true)
+  {
+    initParticles<<<numBlocks, blockSize>>>(info, hash, partidx, numParticles);
+    
+    sort(info, hash, partidx, numParticles);
+    
+    ++counter;
+    
+    if(counter % 1000 == 0) std::cout << "Iteration " << counter << std::endl;
+  }
 }
 

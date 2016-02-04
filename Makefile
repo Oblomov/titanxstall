@@ -8,7 +8,7 @@ comma:=,
 empty:=
 space:=$(empty) $(empty)
 
-CUFLAGS ?=-arch=sm_52
+#CUFLAGS ?=-arch=sm_52
 
 ifneq ($(CXX),)
 	CUFLAGS += -ccbin=$(CXX)
@@ -16,7 +16,7 @@ endif
 
 CPPFLAGS +=-g
 
-CXXFLAGS += -std=c++98
+CXXFLAGS += -std=c++98 -O3
 
 CXXFLAGS += -Wall
 
