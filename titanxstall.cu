@@ -16,6 +16,13 @@
 #include <thrust/device_vector.h>
 #include <thrust/tuple.h>
 #include <thrust/iterator/zip_iterator.h>
+#include <thrust/system/cuda/execution_policy.h>
+
+// declare here for use by cached_alloc.h, should be refactored
+void check(const char *file, unsigned long line, const char *func);
+#define CHECK(func) check(__FILE__, __LINE__, func)
+
+#include "cached_alloc.h"
 
 #define restrict __restrict__
 
@@ -33,13 +40,20 @@ static __forceinline__ __host__ __device__ __attribute__((pure)) uint id(const p
 #define PART_TYPE_MASK	((1<<PART_FLAG_SHIFT)-1)
 #define PART_TYPE(f) (type(f) & PART_TYPE_MASK)
 
+// some defines to make the compare functor and thrust sort key invokation more legible
+typedef thrust::tuple<hashKey, particleinfo> hash_info_pair;
+
+typedef thrust::device_ptr<particleinfo> thrust_info_ptr;
+typedef thrust::device_ptr<hashKey> thrust_hash_ptr;
+typedef thrust::device_ptr<uint> thrust_uint_ptr;
+
+typedef thrust::tuple<thrust_hash_ptr, thrust_info_ptr> hash_info_iterator_pair;
+typedef thrust::zip_iterator<hash_info_iterator_pair> key_iterator;
+
 /// Functor to sort particles by hash (cell), and
 /// by fluid number within the cell
 struct ptype_hash_compare :
-	public thrust::binary_function<
-		thrust::tuple<hashKey, particleinfo>,
-		thrust::tuple<hashKey, particleinfo>,
-		bool>
+	public thrust::binary_function<hash_info_pair, hash_info_pair, bool>
 {
 	typedef thrust::tuple<hashKey, particleinfo> value_type;
 
@@ -60,26 +74,43 @@ struct ptype_hash_compare :
 	}
 };
 
+static cached_allocator *cacher;
+
+typedef void (*sort_func_ptr)(key_iterator const&, key_iterator const&, thrust_uint_ptr const&);
+
+void default_sort(key_iterator const& key_start, key_iterator const& key_end, thrust_uint_ptr const& val_start)
+{
+	ptype_hash_compare comp;
+
+	thrust::sort_by_key(key_start, key_end, val_start, comp);
+}
+
+void caching_sort(key_iterator const& key_start, key_iterator const& key_end, thrust_uint_ptr const& val_start)
+{
+	ptype_hash_compare comp;
+
+	thrust::sort_by_key(thrust::cuda::par(*cacher), key_start, key_end, val_start, comp);
+}
+
+static sort_func_ptr sort_func = &default_sort;
+
+
 void
 sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles)
 {
-	thrust::device_ptr<particleinfo> particleInfo =
+	thrust_info_ptr particleInfo =
 		thrust::device_pointer_cast(info);
-	thrust::device_ptr<hashKey> particleHash =
+	thrust_hash_ptr particleHash =
 		thrust::device_pointer_cast(hash);
-	thrust::device_ptr<uint> particleIndex =
+	thrust_uint_ptr particleIndex =
 		thrust::device_pointer_cast(partidx);
 
-	ptype_hash_compare comp;
-
-	// Sort of the particle indices by cell hash, fluid number and id
-	// There is no need for a stable sort due to the id sort
-	thrust::sort_by_key(
-		thrust::make_zip_iterator(thrust::make_tuple(particleHash, particleInfo)),
-		thrust::make_zip_iterator(thrust::make_tuple(
+	key_iterator key_start(thrust::make_tuple(particleHash, particleInfo));
+	key_iterator key_end(thrust::make_tuple(
 			particleHash + numParticles,
-			particleInfo + numParticles)),
-		particleIndex, comp);
+			particleInfo + numParticles));
+
+	sort_func(key_start, key_end, particleIndex);
 }
 
 __global__ void
@@ -162,6 +193,10 @@ void cleanup(void)
 		shm_unlink(info_name.c_str());
 		infostream = NULL;
 	}
+	if (cacher) {
+		delete cacher;
+		cacher = NULL;
+	}
 	cudaDeviceReset();
 }
 
@@ -181,7 +216,6 @@ void check(const char *file, unsigned long line, const char *func)
 		throw runtime_error(errmsg.str());
 	}
 }
-#define CHECK(func) check(__FILE__, __LINE__, func)
 
 
 int main(int argc, char *argv[])
@@ -213,6 +247,7 @@ int main(int argc, char *argv[])
 
 	uint numParticles = 5*1024*1024;
 	uint device = 0;
+	bool custom_alloc = false;
 
 	const char * const * arg = argv + 1;
 	while (argc > 1) {
@@ -228,6 +263,8 @@ int main(int argc, char *argv[])
 			--argc;
 			++arg;
 			numParticles = atoi(*arg);
+		} else if (!strcmp(*arg, "--cache-alloc")) {
+			custom_alloc = true;
 		}
 		--argc;
 		++arg;
@@ -243,7 +280,10 @@ int main(int argc, char *argv[])
 	cout << scratch.str() << endl;
 	scratch.str("");
 
-
+	if (custom_alloc) {
+		cacher = new cached_allocator;
+		sort_func = &caching_sort;
+	}
 	unsigned long counter = 0;
 
 	particleinfo *info = NULL;

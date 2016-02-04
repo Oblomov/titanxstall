@@ -29,6 +29,6 @@ test: titanxstall
 clean:
 	rm -f titanxstall
 
-%: %.cu
-	nvcc $(CPPFLAGS) $(CUFLAGS) $(LDFLAGS) $(LDLIBS) -o $@ $^
+%: %.cu cached_alloc.h
+	nvcc $(CPPFLAGS) $(CUFLAGS) $(LDFLAGS) $(LDLIBS) -o $@ $<
 
