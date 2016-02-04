@@ -162,7 +162,7 @@ using namespace std;
 static string info_name;
 static FILE *infostream;
 
-void timestamp(string const& msg)
+void timestamp(string const& msg, bool keep=false)
 {
 	static long int init_pos = 0;
 
@@ -180,7 +180,7 @@ void timestamp(string const& msg)
 	}
 	fprintf(infostream, "%s: %s\n", timestamp, msg.c_str());
 	fflush(infostream);
-	if (init_pos)
+	if (!keep && init_pos)
 		fseek(infostream, init_pos, SEEK_SET);
 	else
 		init_pos = ftell(infostream);
@@ -189,9 +189,9 @@ void timestamp(string const& msg)
 // output the content of the scratch stringstream to the infostream, time-stamped,
 // and optionally to the console too
 // clear the scratch stringstream afterwards
-void report(stringstream &scratch, bool on_console=false)
+void report(stringstream &scratch, bool on_console, bool keep)
 {
-	timestamp(scratch.str());
+	timestamp(scratch.str(), keep);
 	if (on_console)
 		cout << scratch.str() << endl;
 	scratch.str("");
@@ -286,14 +286,14 @@ int main(int argc, char *argv[])
 	CHECK("set device");
 
 	scratch << "Initializing PID " << getpid() << " device " << device << " particles " << numParticles << " ...";
-	report(scratch, true);
+	report(scratch, true, true);
 
 	if (custom_alloc) {
 		cacher = new cached_allocator;
 		sort_func = &caching_sort;
 
 		scratch << "Caching allocator enabled";
-		report(scratch, true);
+		report(scratch, true, true);
 	}
 	unsigned long counter = 0;
 
@@ -322,7 +322,7 @@ int main(int argc, char *argv[])
 
 		scratch << "Iteration " << counter;
 
-		report(scratch, counter % 1000 == 0);
+		report(scratch, counter % 1000 == 0, false);
 	}
 }
 
