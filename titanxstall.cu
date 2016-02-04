@@ -205,6 +205,7 @@ void cleanup(void)
 		infostream = NULL;
 	}
 	if (cacher) {
+		cudaDeviceSynchronize();
 		delete cacher;
 		cacher = NULL;
 	}
@@ -220,7 +221,7 @@ void sig_handler(int signum)
 void check(const char *file, unsigned long line, const char *func)
 {
 	stringstream errmsg;
-	cudaError_t err = cudaGetLastError();
+	cudaError_t err = cudaDeviceSynchronize();
 	if (cudaSuccess != err) {
 		errmsg << file << ":" << line << " in " << func
 			<< ": runtime API error " << err << " (" << cudaGetErrorString(err) << ")";
