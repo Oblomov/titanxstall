@@ -2,6 +2,7 @@
 #include <stdexcept>
 
 #include <unistd.h>
+#include <signal.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <ctime>
@@ -124,7 +125,10 @@ reHashParticles(
 
 using namespace std;
 
-void timestamp(FILE* infostream, string msg)
+static string info_name;
+static FILE *infostream;
+
+void timestamp(string msg)
 {
 	static long int init_pos = 0;
 
@@ -141,16 +145,32 @@ void timestamp(FILE* infostream, string msg)
 		snprintf(timestamp, 36, "[unknown]");
 	}
 	fprintf(infostream, "%s: %s\n", timestamp, msg.c_str());
+	fflush(infostream);
 	if (init_pos)
 		fseek(infostream, init_pos, SEEK_SET);
 	else
 		init_pos = ftell(infostream);
 }
 
+void unlink_stream(void)
+{
+	if (infostream) {
+		fclose(infostream);
+		shm_unlink(info_name.c_str());
+		infostream = NULL;
+	}
+}
+
+void sig_handler(int signum)
+{
+	unlink_stream();
+	exit(1);
+}
+
+
 int main(int argc, char *argv[])
 {
 	stringstream scratch;
-	string info_name;
 
 	scratch << "/titanxfall-" << getpid();
 
@@ -161,12 +181,22 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		throw runtime_error("can't open info stream");
 
-	FILE *infostream = fdopen(ret, "w");
+	infostream = fdopen(ret, "w");
 	if (!infostream)
 		throw runtime_error("can't fdopen info stream");
 
-	timestamp(infostream, "initializing");
-	cout << "Initializing " << getpid() << " ..." << endl;
+
+	// catch SIGINT
+	struct sigaction int_action;
+	memset(&int_action, 0, sizeof(int_action));
+	int_action.sa_handler = sig_handler;
+	ret = sigaction(SIGINT, &int_action, NULL);
+
+	if (ret < 0)
+		throw runtime_error("can't register info stream cleanup function");
+
+	timestamp("initializing");
+	cout << "Initializing PID " << getpid() << " ..." << endl;
 
 	uint numParticles = 5*1024*1024;
 
@@ -215,7 +245,7 @@ int main(int argc, char *argv[])
 
 		scratch << "iteration " << counter;
 
-		timestamp(infostream, scratch.str());
+		timestamp(scratch.str());
 		scratch.str("");
 
 		if (counter % 1000 == 0)
