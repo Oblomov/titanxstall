@@ -42,3 +42,7 @@ any other reason), the GPU reset will trigger an error and crash the
 program, but if no watchdog is active, the program will just get stuck
 at the same iteration, so the only way to detect this has happened is by
 looking at the info stream.
+
+(Lock-ups have been shown to occur as early as around 2K iterations, but
+also as late as 20K+ iterations, so you might need to leave the program
+running for 10 minutes or more.)
