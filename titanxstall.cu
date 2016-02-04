@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
 {
 	stringstream scratch;
 
-	scratch << "/titanxfall-" << getpid();
+	scratch << "/titanxstall-" << getpid();
 
 	info_name = scratch.str();
 	scratch.str("");
