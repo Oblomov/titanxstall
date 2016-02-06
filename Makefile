@@ -14,7 +14,7 @@ ifneq ($(CXX),)
 	CUFLAGS += -ccbin=$(CXX)
 endif
 
-CPPFLAGS +=-g
+CPPFLAGS +=-g -O3
 
 CXXFLAGS += -std=c++98
 
