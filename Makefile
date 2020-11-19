@@ -8,27 +8,30 @@ comma:=,
 empty:=
 space:=$(empty) $(empty)
 
-CUFLAGS ?=-arch=sm_52
+CUFLAGS ?=-arch=sm_75
 
 ifneq ($(CXX),)
 	CUFLAGS += -ccbin=$(CXX)
 endif
 
+NVCC ?= nvcc
+
 CPPFLAGS +=-g -O3
 
-CXXFLAGS += -std=c++98
+CXXFLAGS += -std=c++14
 
 CXXFLAGS += -Wall
 
 CUFLAGS += --compiler-options $(subst $(space),$(comma),$(strip $(CXXFLAGS)))
+CUFLAGS += -lineinfo
 
-all: titanxstall
+PROG=thrust-cuda11-sort-bug
+all: $(PROG)
 
-test: titanxstall
-	./titanxstall
+test: $(PROG)
+	./$(PROG)
 clean:
-	rm -f titanxstall
+	rm -f $(PROG)
 
-%: %.cu cached_alloc.h
-	nvcc $(CPPFLAGS) $(CUFLAGS) $(LDFLAGS) $(LDLIBS) -o $@ $<
-
+%: %.cu
+	$(NVCC) $(CPPFLAGS) $(CUFLAGS) $(LDFLAGS) $(LDLIBS) -o $@ $<
