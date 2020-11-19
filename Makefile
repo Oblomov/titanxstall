@@ -25,13 +25,21 @@ CXXFLAGS += -Wall
 CUFLAGS += --compiler-options $(subst $(space),$(comma),$(strip $(CXXFLAGS)))
 CUFLAGS += -lineinfo
 
+LINKER = $(NVCC) $(CUFLAGS)
+
 PROG=thrust-cuda11-sort-bug
 all: $(PROG)
 
 test: $(PROG)
 	./$(PROG)
 clean:
-	rm -f $(PROG)
+	rm -f $(PROG) $(PROG).o
 
-%: %.cu
-	$(NVCC) $(CPPFLAGS) $(CUFLAGS) $(LDFLAGS) $(LDLIBS) -o $@ $<
+%.o: %.cu
+	$(NVCC) $(CPPFLAGS) $(CUFLAGS) $(LDFLAGS) $(LDLIBS) -c -o $@ $<
+
+%: %.o
+	$(LINKER) -o $@ $^ $(LDFLAGS) $(LDLIBS)
+
+
+.PRECIOUS: $(PROG).o $(PROG)

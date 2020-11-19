@@ -93,6 +93,11 @@ sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles)
 	thrust_uint_ptr particleIndex =
 		thrust::device_pointer_cast(partidx);
 
+	for (uint i = 0; i < numParticles; ++i) {
+		printf("BEFORE: %d: %d %d %d %d %d %d\n", i, info[i].x, info[i].y, info[i].z, info[i].w,
+			hash[i], partidx[i]);
+	}
+
 	ptype_hash_compare comp;
 
 	key_iterator key_start(thrust::make_tuple(particleHash, particleInfo));
@@ -100,7 +105,23 @@ sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles)
 			particleHash + numParticles,
 			particleInfo + numParticles));
 
-	thrust::sort_by_key(key_start, key_end, particleIndex, comp);
+	if (numParticles > 0)
+		thrust::sort_by_key(key_start, key_end, particleIndex, comp);
+
+	for (uint i = 0; i < numParticles; ++i) {
+		printf("AFTER: %d: %d %d %d %d %d %d\n", i, info[i].x, info[i].y, info[i].z, info[i].w,
+			hash[i], partidx[i]);
+	}
+}
+
+__global__ void
+initIdx(uint* partidx, uint numParticles)
+{
+	const uint index = blockIdx.x * blockDim.x + threadIdx.x;
+	if (index >= numParticles)
+		return;
+
+	partidx[index] = index;
 }
 
 using namespace std;
@@ -139,36 +160,42 @@ int main(int argc, char *argv[])
 	cudaSetDevice(device);
 	CHECK("set device");
 
-	particleinfo *info = NULL;
-	hashKey *hash = NULL;
-	uint *partidx = NULL;
+	particleinfo *h_info = NULL, *d_info = NULL;
+	hashKey *h_hash = NULL, *d_hash = NULL;
+	uint *h_partidx = NULL, *d_partidx = NULL;
 
-	cudaMallocManaged(&info, numParticles*sizeof(*info));
-	cudaMallocManaged(&hash, numParticles*sizeof(*hash));
-	cudaMallocManaged(&partidx, numParticles*sizeof(*partidx));
+	h_info = new particleinfo[numParticles];
+	h_hash = new hashKey[numParticles];
+	h_partidx = new uint[numParticles];
+
+	cudaMallocManaged(&d_info, numParticles*sizeof(*d_info));
+	cudaMallocManaged(&d_hash, numParticles*sizeof(*d_hash));
+	cudaMallocManaged(&d_partidx, numParticles*sizeof(*d_partidx));
 
 	ifstream data("data.idx");
 	for (uint i = 0; i < numParticles; ++i) {
 		particleinfo pi;
 		data >> pi.x >> pi.y >> pi.z >> pi.w;
 
-		info[i] = pi;
+		h_info[i] = pi;
 
-		data >> hash[i] >> partidx[i];
+		data >> h_hash[i] >> h_partidx[i];
 	}
 
-	for (uint i = 0; i < numParticles; ++i) {
-		printf("BEFORE: %d: %d %d %d %d %d %d\n", i, info[i].x, info[i].y, info[i].z, info[i].w,
-			hash[i], partidx[i]);
-	}
+	cudaMemcpy(d_info, h_info, numParticles*sizeof(*h_info), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_hash, h_hash, numParticles*sizeof(*h_hash), cudaMemcpyHostToDevice);
 
-	sort(info, hash, partidx, numParticles);
-	CHECK("sort"); // sync
+	// On GPUSPH, partidx is actually initialized on device
+	initIdx<<<(numParticles + 256 - 1)/256, 256>>>(d_partidx, numParticles);
+	CHECK("initIdx");
 
-	for (uint i = 0; i < numParticles; ++i) {
-		printf("AFTER: %d: %d %d %d %d %d %d\n", i, info[i].x, info[i].y, info[i].z, info[i].w,
-			hash[i], partidx[i]);
-	}
+	sort(d_info, d_hash, d_partidx, numParticles);
 
+	cudaFree(d_partidx);
+	cudaFree(d_hash);
+	cudaFree(d_info);
+
+	delete[] h_partidx;
+	delete[] h_hash;
+	delete[] h_info;
 }
-
