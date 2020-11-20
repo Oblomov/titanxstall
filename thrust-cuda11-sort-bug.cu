@@ -57,36 +57,7 @@ typedef thrust::device_ptr<uint> thrust_uint_ptr;
 typedef thrust::tuple<thrust_hash_ptr, thrust_info_ptr> hash_info_iterator_pair;
 typedef thrust::zip_iterator<hash_info_iterator_pair> key_iterator;
 
-typedef uint64_t flag_t;
-
-#define ENABLE_NONE ((flag_t)0)
-
-enum RheologyType { NEWTONIAN, };
-
-enum TurbulenceModel { LAMINAR_FLOW, KEPSILON, };
-
-enum ComputationalViscosityType { KINEMATIC, };
-
-enum ViscousModel { MORRIS, };
-
-enum AverageOperator { ARITHMETIC, };
-
-template<
-	RheologyType _rheologytype = NEWTONIAN,
-	TurbulenceModel _turbmodel = LAMINAR_FLOW,
-	ComputationalViscosityType _compvisc = KINEMATIC,
-	ViscousModel _viscmodel = MORRIS,
-	AverageOperator _avgop = ARITHMETIC,
-	flag_t _simflags = ENABLE_NONE,
-	// is this a constant-viscosity formulation?
-	bool _is_const_visc = (
-		(_simflags != ENABLE_NONE) &&
-		(_rheologytype == NEWTONIAN) &&
-		(_turbmodel != KEPSILON)
-	)
->
-struct FullViscSpec {
-};
+struct FullViscSpec { };
 
 class AbstractEngine
 {
@@ -231,9 +202,7 @@ int main(int argc, char *argv[])
 		data >> hash[i] >> partidx[i];
 	}
 
-	using MyViscSpec = FullViscSpec<>;
-
-	AbstractEngine *engine = new CUDAEngine<MyViscSpec>();
+	AbstractEngine *engine = new CUDAEngine<FullViscSpec>();
 
 	engine->sort(info, hash, partidx, numParticles);
 
