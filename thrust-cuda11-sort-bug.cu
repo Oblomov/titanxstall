@@ -57,12 +57,6 @@ typedef thrust::device_ptr<uint> thrust_uint_ptr;
 typedef thrust::tuple<thrust_hash_ptr, thrust_info_ptr> hash_info_iterator_pair;
 typedef thrust::zip_iterator<hash_info_iterator_pair> key_iterator;
 
-enum SPHFormulation { SPH_F1 = 1, };
-
-enum BoundaryType { LJ_BOUNDARY, };
-
-enum Periodicity { PERIODIC_NONE = 0, };
-
 typedef uint64_t flag_t;
 
 #define ENABLE_NONE ((flag_t)0)
@@ -108,8 +102,7 @@ public:
 	virtual void sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles) = 0;
 };
 
-template<SPHFormulation sph_formulation, typename ViscSpec, BoundaryType boundarytype, Periodicity periodicbound, flag_t simflags,
-	bool neibcount>
+template<typename ViscSpec>
 class CUDAEngine : public AbstractEngine
 {
 public:
@@ -248,7 +241,7 @@ int main(int argc, char *argv[])
 
 	using MyViscSpec = FullViscSpec<>;
 
-	AbstractEngine *engine = new CUDAEngine<SPH_F1, MyViscSpec, LJ_BOUNDARY, PERIODIC_NONE, ENABLE_NONE, true>();
+	AbstractEngine *engine = new CUDAEngine<MyViscSpec>();
 
 	engine->sort(info, hash, partidx, numParticles);
 
