@@ -150,11 +150,6 @@ sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles)
 	thrust_uint_ptr particleIndex =
 		thrust::device_pointer_cast(partidx);
 
-	for (uint i = 0; i < numParticles; ++i) {
-		printf("BEFORE: %d: %d %d %d %d %d %d\n", i, info[i].x, info[i].y, info[i].z, info[i].w,
-			hash[i], partidx[i]);
-	}
-
 	ptype_hash_compare comp;
 
 	key_iterator key_start(thrust::make_tuple(particleHash, particleInfo));
@@ -162,13 +157,27 @@ sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles)
 			particleHash + numParticles,
 			particleInfo + numParticles));
 
-	if (numParticles > 0)
-		thrust::sort_by_key(key_start, key_end, particleIndex, comp);
 
+	// Verify that there is no .y equal to 255 before
 	for (uint i = 0; i < numParticles; ++i) {
-		printf("AFTER: %d: %d %d %d %d %d %d\n", i, info[i].x, info[i].y, info[i].z, info[i].w,
-			hash[i], partidx[i]);
+		if (info[i].y == 255) {
+			printf("BEFORE: %d: %d %d %d %d %d %d\n", i, info[i].x, info[i].y, info[i].z, info[i].w,
+				hash[i], partidx[i]);
+			throw std::runtime_error("clobbered info");
+		}
 	}
+
+	thrust::sort_by_key(key_start, key_end, particleIndex, comp);
+
+	// the sort should not touch .y
+	for (uint i = 0; i < numParticles; ++i) {
+		if (info[i].y == 255) {
+			printf("AFTER: %d: %d %d %d %d %d %d\n", i, info[i].x, info[i].y, info[i].z, info[i].w,
+				hash[i], partidx[i]);
+			throw std::runtime_error("clobbered info");
+		}
+	}
+	puts("All OK!");
 }
 
 };
