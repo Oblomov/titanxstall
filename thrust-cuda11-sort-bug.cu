@@ -57,6 +57,63 @@ typedef thrust::device_ptr<uint> thrust_uint_ptr;
 typedef thrust::tuple<thrust_hash_ptr, thrust_info_ptr> hash_info_iterator_pair;
 typedef thrust::zip_iterator<hash_info_iterator_pair> key_iterator;
 
+enum SPHFormulation { SPH_F1 = 1, };
+
+enum BoundaryType { LJ_BOUNDARY, };
+
+enum Periodicity { PERIODIC_NONE = 0, };
+
+typedef uint64_t flag_t;
+
+#define ENABLE_NONE ((flag_t)0)
+
+enum RheologyType { NEWTONIAN, };
+
+enum TurbulenceModel { LAMINAR_FLOW, KEPSILON, };
+
+enum ComputationalViscosityType { KINEMATIC, };
+
+enum ViscousModel { MORRIS, };
+
+enum AverageOperator { ARITHMETIC, };
+
+template<
+	RheologyType _rheologytype = NEWTONIAN,
+	TurbulenceModel _turbmodel = LAMINAR_FLOW,
+	ComputationalViscosityType _compvisc = KINEMATIC,
+	ViscousModel _viscmodel = MORRIS,
+	AverageOperator _avgop = ARITHMETIC,
+	flag_t _simflags = ENABLE_NONE,
+	// is this a constant-viscosity formulation?
+	bool _is_const_visc = (
+		(_simflags != ENABLE_NONE) &&
+		(_rheologytype == NEWTONIAN) &&
+		(_turbmodel != KEPSILON)
+	)
+>
+struct FullViscSpec {
+	static constexpr RheologyType rheologytype = _rheologytype;
+	static constexpr TurbulenceModel turbmodel = _turbmodel;
+	static constexpr ComputationalViscosityType compvisc = _compvisc;
+	static constexpr ViscousModel viscmodel = _viscmodel;
+	static constexpr AverageOperator avgop = _avgop;
+	static constexpr flag_t simflags = _simflags;
+
+	static constexpr bool is_const_visc = _is_const_visc;
+};
+
+class AbstractEngine
+{
+public:
+	virtual void sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles) = 0;
+};
+
+template<SPHFormulation sph_formulation, typename ViscSpec, BoundaryType boundarytype, Periodicity periodicbound, flag_t simflags,
+	bool neibcount>
+class CUDAEngine : public AbstractEngine
+{
+public:
+
 /// Functor to sort particles by hash (cell), and
 /// by fluid number within the cell
 struct ptype_hash_compare :
@@ -114,6 +171,8 @@ sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles)
 	}
 }
 
+};
+
 __global__ void
 initIdx(uint* partidx, uint numParticles)
 {
@@ -164,13 +223,36 @@ int main(int argc, char *argv[])
 	hashKey *h_hash = NULL, *d_hash = NULL;
 	uint *h_partidx = NULL, *d_partidx = NULL;
 
+	float4 *d_pos = NULL, *d_vel = NULL, *d_forces = NULL;
+
+	uint *d_cellStart = NULL, *d_cellEnd = NULL;
+	ushort *d_neibsList = NULL;
+
+	uint numCells = 10455;
+	uint neibsListSize = numParticles*128;
+
+
 	h_info = new particleinfo[numParticles];
 	h_hash = new hashKey[numParticles];
 	h_partidx = new uint[numParticles];
 
+	cudaMallocManaged(&d_pos, numParticles*sizeof(*d_pos));
+	cudaMallocManaged(&d_vel, numParticles*sizeof(*d_vel));
 	cudaMallocManaged(&d_info, numParticles*sizeof(*d_info));
+
+	cudaMallocManaged(&d_forces, numParticles*sizeof(*d_forces));
+	cudaMemset(d_forces, 0, numParticles*sizeof(*d_forces));
+
+	cudaMallocManaged(&d_cellStart, numCells*sizeof(*d_cellStart));
+	cudaMemset(d_cellStart, -1, numCells*sizeof(*d_cellStart));
+	cudaMallocManaged(&d_cellEnd, numCells*sizeof(*d_cellEnd));
+	cudaMemset(d_cellEnd, -1, numCells*sizeof(*d_cellEnd));
+
 	cudaMallocManaged(&d_hash, numParticles*sizeof(*d_hash));
 	cudaMallocManaged(&d_partidx, numParticles*sizeof(*d_partidx));
+
+	cudaMallocManaged(&d_neibsList, neibsListSize*sizeof(*d_neibsList));
+	cudaMemset(d_neibsList, -1,  neibsListSize*sizeof(*d_neibsList));
 
 	ifstream data("data.idx");
 	for (uint i = 0; i < numParticles; ++i) {
@@ -189,7 +271,11 @@ int main(int argc, char *argv[])
 	initIdx<<<(numParticles + 256 - 1)/256, 256>>>(d_partidx, numParticles);
 	CHECK("initIdx");
 
-	sort(d_info, d_hash, d_partidx, numParticles);
+	using MyViscSpec = FullViscSpec<>;
+
+	AbstractEngine *engine = new CUDAEngine<SPH_F1, MyViscSpec, LJ_BOUNDARY, PERIODIC_NONE, ENABLE_NONE, true>();
+
+	engine->sort(d_info, d_hash, d_partidx, numParticles);
 
 	cudaFree(d_partidx);
 	cudaFree(d_hash);
