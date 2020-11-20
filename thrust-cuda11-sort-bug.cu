@@ -86,14 +86,6 @@ template<
 	)
 >
 struct FullViscSpec {
-	static constexpr RheologyType rheologytype = _rheologytype;
-	static constexpr TurbulenceModel turbmodel = _turbmodel;
-	static constexpr ComputationalViscosityType compvisc = _compvisc;
-	static constexpr ViscousModel viscmodel = _viscmodel;
-	static constexpr AverageOperator avgop = _avgop;
-	static constexpr flag_t simflags = _simflags;
-
-	static constexpr bool is_const_visc = _is_const_visc;
 };
 
 class AbstractEngine
