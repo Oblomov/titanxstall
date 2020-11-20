@@ -219,69 +219,31 @@ int main(int argc, char *argv[])
 	cudaSetDevice(device);
 	CHECK("set device");
 
-	particleinfo *h_info = NULL, *d_info = NULL;
-	hashKey *h_hash = NULL, *d_hash = NULL;
-	uint *h_partidx = NULL, *d_partidx = NULL;
+	particleinfo *info = NULL;
+	hashKey *hash = NULL;
+	uint *partidx = NULL;
 
-	float4 *d_pos = NULL, *d_vel = NULL, *d_forces = NULL;
-
-	uint *d_cellStart = NULL, *d_cellEnd = NULL;
-	ushort *d_neibsList = NULL;
-
-	uint numCells = 10455;
-	uint neibsListSize = numParticles*128;
-
-
-	h_info = new particleinfo[numParticles];
-	h_hash = new hashKey[numParticles];
-	h_partidx = new uint[numParticles];
-
-	cudaMallocManaged(&d_pos, numParticles*sizeof(*d_pos));
-	cudaMallocManaged(&d_vel, numParticles*sizeof(*d_vel));
-	cudaMallocManaged(&d_info, numParticles*sizeof(*d_info));
-
-	cudaMallocManaged(&d_forces, numParticles*sizeof(*d_forces));
-	cudaMemset(d_forces, 0, numParticles*sizeof(*d_forces));
-
-	cudaMallocManaged(&d_cellStart, numCells*sizeof(*d_cellStart));
-	cudaMemset(d_cellStart, -1, numCells*sizeof(*d_cellStart));
-	cudaMallocManaged(&d_cellEnd, numCells*sizeof(*d_cellEnd));
-	cudaMemset(d_cellEnd, -1, numCells*sizeof(*d_cellEnd));
-
-	cudaMallocManaged(&d_hash, numParticles*sizeof(*d_hash));
-	cudaMallocManaged(&d_partidx, numParticles*sizeof(*d_partidx));
-
-	cudaMallocManaged(&d_neibsList, neibsListSize*sizeof(*d_neibsList));
-	cudaMemset(d_neibsList, -1,  neibsListSize*sizeof(*d_neibsList));
+	cudaMallocManaged(&info, numParticles*sizeof(*info));
+	cudaMallocManaged(&hash, numParticles*sizeof(*hash));
+	cudaMallocManaged(&partidx, numParticles*sizeof(*partidx));
 
 	ifstream data("data.idx");
 	for (uint i = 0; i < numParticles; ++i) {
 		particleinfo pi;
 		data >> pi.x >> pi.y >> pi.z >> pi.w;
 
-		h_info[i] = pi;
+		info[i] = pi;
 
-		data >> h_hash[i] >> h_partidx[i];
+		data >> hash[i] >> partidx[i];
 	}
-
-	cudaMemcpy(d_info, h_info, numParticles*sizeof(*h_info), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_hash, h_hash, numParticles*sizeof(*h_hash), cudaMemcpyHostToDevice);
-
-	// On GPUSPH, partidx is actually initialized on device
-	initIdx<<<(numParticles + 256 - 1)/256, 256>>>(d_partidx, numParticles);
-	CHECK("initIdx");
 
 	using MyViscSpec = FullViscSpec<>;
 
 	AbstractEngine *engine = new CUDAEngine<SPH_F1, MyViscSpec, LJ_BOUNDARY, PERIODIC_NONE, ENABLE_NONE, true>();
 
-	engine->sort(d_info, d_hash, d_partidx, numParticles);
+	engine->sort(info, hash, partidx, numParticles);
 
-	cudaFree(d_partidx);
-	cudaFree(d_hash);
-	cudaFree(d_info);
-
-	delete[] h_partidx;
-	delete[] h_hash;
-	delete[] h_info;
+	cudaFree(partidx);
+	cudaFree(hash);
+	cudaFree(info);
 }
