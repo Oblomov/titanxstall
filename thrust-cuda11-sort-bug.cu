@@ -59,14 +59,8 @@ typedef thrust::zip_iterator<hash_info_iterator_pair> key_iterator;
 
 struct FullViscSpec { };
 
-class AbstractEngine
-{
-public:
-	virtual void sort(particleinfo *info, hashKey *hash, uint *partidx, uint numParticles) = 0;
-};
-
 template<typename ViscSpec>
-class CUDAEngine : public AbstractEngine
+class CUDAEngine
 {
 public:
 
@@ -202,7 +196,7 @@ int main(int argc, char *argv[])
 		data >> hash[i] >> partidx[i];
 	}
 
-	AbstractEngine *engine = new CUDAEngine<FullViscSpec>();
+	auto *engine = new CUDAEngine<FullViscSpec>();
 
 	engine->sort(info, hash, partidx, numParticles);
 
