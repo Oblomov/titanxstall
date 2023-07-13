@@ -8,26 +8,29 @@ comma:=,
 empty:=
 space:=$(empty) $(empty)
 
-CUFLAGS ?=-arch=sm_75
-
-ifneq ($(CXX),)
-	CUFLAGS += -ccbin=$(CXX)
-endif
-
-NVCC ?= nvcc
-
 CPPFLAGS +=-g -O3
 
 CXXFLAGS += -std=c++14
 
 CXXFLAGS += -Wall
 
-CUFLAGS += --compiler-options $(subst $(space),$(comma),$(strip $(CXXFLAGS)))
-CUFLAGS += -lineinfo
+ifeq ($(cpu),1)
+ HIPCC = $(CXX)
+ CPPFLAGS += -DCPU_BACKEND_ENABLED
+else
+ HIPCC = /opt/rocm/bin/hipcc
+ HIPCCFLAGS += -x hip
+ CPPFLAGS += -DHIP_BACKEND_ENABLED
+endif
+ifeq ($(openmp),1)
+ CXXFLAGS += -fopenmp
+ LDFLAGS += -fopenmp
+endif
 
-LINKER = $(NVCC) $(CUFLAGS)
+LINKER = $(HIPCC) $(HIPLDFLAGS)
 
-PROG=thrust-cuda11-sort-bug
+PROG=thrust-test
+
 all: $(PROG)
 
 test: $(PROG)
@@ -35,8 +38,8 @@ test: $(PROG)
 clean:
 	rm -f $(PROG) $(PROG).o
 
-%.o: %.cu
-	$(NVCC) $(CPPFLAGS) $(CUFLAGS) $(LDFLAGS) $(LDLIBS) -c -o $@ $<
+%.o: %.hip.cc
+	$(HIPCC) $(CXXFLAGS) $(CPPFLAGS) $(HIPCCFLAGS) -c -o $@ $<
 
 %: %.o
 	$(LINKER) -o $@ $^ $(LDFLAGS) $(LDLIBS)
