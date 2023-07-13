@@ -262,18 +262,21 @@ int main(int argc, char *argv[])
 
 	auto *engine = new Engine<FullViscSpec>();
 
-	cout << "Sorting ..." << endl;
+	for (uint run = 0; run < 5; ++run) {
+		cout << "Sorting ..." << endl;
 
-	using clock = std::chrono::steady_clock;
-	using time_point = clock::time_point;
-	using duration = std::chrono::duration<double, std::milli>;
+		using clock = std::chrono::steady_clock;
+		using time_point = clock::time_point;
+		using duration = std::chrono::duration<double, std::milli>;
 
-	time_point before = clock::now();
-	engine->sort(info, hash, partidx, totalParticles);
-	time_point after = clock::now();
+		time_point before = clock::now();
+		engine->sort(info, hash, partidx, totalParticles);
+		time_point after = clock::now();
 
-	cout << "... done" << endl;
-	cout << "Runtime: " << duration(after - before).count() << "ms" << endl;
+		cout << "... done" << endl;
+		cout << "Runtime: " << duration(after - before).count() << "ms" << endl;
+	}
+
 	hipFree(partidx);
 	hipFree(hash);
 	hipFree(info);
